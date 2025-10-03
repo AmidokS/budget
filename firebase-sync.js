@@ -122,10 +122,11 @@ class FirebaseSync {
   getFamilyId() {
     let familyId = localStorage.getItem('familyId');
     if (!familyId) {
-      // Можно задать вручную или сгенерировать
-      familyId = prompt('Введите ID семьи (или создайте новый):') || 
-                  'family_' + Date.now().toString(36);
+      // Генерируем новый ID автоматически
+      familyId = 'family_' + Date.now().toString(36);
       localStorage.setItem('familyId', familyId);
+      console.log('🏠 Создан новый Family ID:', familyId);
+      this.showSyncStatus('success', `Новая семья: ${familyId}`);
     }
     return familyId;
   }
@@ -692,12 +693,13 @@ window.showFamilyId = function() {
 
 ⚠️ Для синхронизации ID семьи должен быть одинаковым на всех устройствах!`;
   
-  alert(message);
   console.log('👨‍👩‍👧‍👦 Family ID Info:', {
     familyId,
     deletedCount,
     isMobile: navigator.userAgent.includes('Mobile')
   });
+  
+  window.firebaseSync?.showSyncStatus('success', `Family ID: ${familyId}`);
 };
 
 // Функция для смены Family ID
@@ -718,15 +720,17 @@ window.cleanupDeletedTransactions = function() {
 window.resetDeletedTransactions = function() {
   localStorage.removeItem('deletedTransactions');
   console.log('🧹 Список удаленных транзакций очищен');
-  alert('Список удаленных транзакций сброшен');
+  window.firebaseSync?.showSyncStatus('success', 'Список удаленных сброшен');
 };
 
 // Функция для принудительной повторной инициализации Firebase
 window.reinitializeFirebase = function() {
   if (window.firebaseSync) {
     console.log('🔄 Принудительная реинициализация Firebase...');
+    window.firebaseSync.showSyncStatus('syncing', 'Переинициализация...');
     window.firebaseSync.init().then(() => {
-      alert('Firebase переинициализирован');
+      console.log('✅ Firebase переинициализирован');
+      window.firebaseSync.showSyncStatus('success', 'Firebase переинициализирован');
     });
   }
 };
@@ -734,35 +738,34 @@ window.reinitializeFirebase = function() {
 // Функция для тестирования скорости синхронизации
 window.testSyncSpeed = function() {
   if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
-    alert('Firebase не инициализирован');
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
     return;
   }
   
   const startTime = Date.now();
   console.log('⏱️ Тест скорости синхронизации начат в:', new Date().toLocaleTimeString());
+  window.firebaseSync.showSyncStatus('syncing', 'Тестирование скорости...');
   
-  // Добавляем тестовую транзакцию
-  const testTransaction = {
-    id: 'test_' + Date.now(),
-    type: 'expense',
-    amount: 1,
-    description: 'ТЕСТ СКОРОСТИ',
-    category: 'Прочее',
-    date: new Date().toISOString().split('T')[0],
-    timestamp: Date.now()
-  };
-  
-  // Сохраняем локально
-  const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-  transactions.push(testTransaction);
-  localStorage.setItem('transactions', JSON.stringify(transactions));
-  
-  // Отправляем в Firebase
-  window.firebaseSync.syncToFirebase().then(() => {
+  // Простая проверка соединения без создания тестовых данных
+  const connectedRef = window.firebaseSync.database.ref('.info/connected');
+  connectedRef.once('value', (snapshot) => {
     const endTime = Date.now();
     const duration = endTime - startTime;
-    console.log(`⏱️ Тест завершен за ${duration}ms`);
-    alert(`Тест скорости: ${duration}ms`);
+    const isConnected = snapshot.val();
+    
+    if (isConnected) {
+      console.log(`⏱️ Тест соединения завершен за ${duration}ms`);
+      window.firebaseSync.showSyncStatus('success', `Соединение: ${duration}ms`);
+    } else {
+      console.log('❌ Нет соединения с Firebase');
+      window.firebaseSync.showSyncStatus('error', 'Нет соединения');
+    }
+  }).catch(error => {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.error('❌ Ошибка теста соединения:', error);
+    window.firebaseSync.showSyncStatus('error', `Ошибка: ${duration}ms`);
   });
 };
 
@@ -771,14 +774,16 @@ window.reconnectListeners = function() {
   if (window.firebaseSync) {
     window.firebaseSync.reconnectListeners();
   } else {
-    alert('Firebase не инициализирован');
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
   }
 };
 
 // Функция для проверки статуса соединения
 window.checkConnectionStatus = function() {
   if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
-    alert('Firebase не инициализирован');
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
     return;
   }
   
@@ -787,18 +792,20 @@ window.checkConnectionStatus = function() {
     const isConnected = snapshot.val();
     const status = isConnected ? '✅ Подключено' : '❌ Отключено';
     console.log('🔍 Статус соединения:', status);
-    alert(`Firebase: ${status}`);
+    window.firebaseSync.showSyncStatus(isConnected ? 'success' : 'error', status);
   });
 };
 
 // Функция для полной синхронизации и обновления интерфейса
 window.fullSync = function() {
   if (!window.firebaseSync) {
-    alert('Firebase не инициализирован');
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
     return;
   }
   
   console.log('🔄 Запуск полной синхронизации...');
+  window.firebaseSync.showSyncStatus('syncing', 'Полная синхронизация...');
   
   // Принудительная синхронизация
   window.firebaseSync.forcSync().then(() => {
@@ -821,7 +828,8 @@ window.fullSync = function() {
         console.log('🎯 Цели обновлены');
       }
       
-      alert('Полная синхронизация завершена!');
+      window.firebaseSync.showSyncStatus('success', 'Полная синхронизация завершена');
+      console.log('✅ Полная синхронизация завершена!');
     }, 500);
   });
 };
@@ -865,7 +873,7 @@ window.diagnoseProblem = function() {
   }
   
   console.log('🔧 === КОНЕЦ ДИАГНОСТИКИ ===');
-  alert('Диагностика завершена. Смотрите результаты в консоли (F12).');
+  window.firebaseSync?.showSyncStatus('success', 'Диагностика завершена - смотрите консоль');
 };
 
 // Функция полной очистки всех данных
