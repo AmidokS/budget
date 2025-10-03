@@ -56,6 +56,17 @@ class FirebaseSync {
       window.addEventListener('online', () => this.handleOnlineChange(true));
       window.addEventListener('offline', () => this.handleOnlineChange(false));
       
+      // Дополнительные слушатели для мобильных устройств
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          console.log('📱 Приложение вернулось в фокус - принудительная синхронизация');
+          this.forcSync();
+        }
+      });
+      
+      // Периодическая проверка соединения с Firebase
+      this.startHeartbeat();
+      
       // Подписка на изменения данных
       this.setupDataListeners();
       
@@ -128,11 +139,26 @@ class FirebaseSync {
     
     console.log('👂 Настраиваем слушатели для семьи:', familyId);
 
-    // Слушатель транзакций
+    // Слушатель транзакций с дополнительными проверками
     familyRef.child('transactions').on('value', (snapshot) => {
       const firebaseTransactions = snapshot.val() || {};
-      console.log('📥 Получены транзакции из Firebase:', Object.keys(firebaseTransactions).length);
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`📥 [${timestamp}] Получены транзакции из Firebase:`, Object.keys(firebaseTransactions).length);
+      
+      // Показываем мгновенное уведомление
+      if (Object.keys(firebaseTransactions).length > 0) {
+        this.showSyncStatus('success', `Обновлено в ${timestamp}`);
+      }
+      
       this.mergeTransactions(firebaseTransactions);
+    }, (error) => {
+      console.error('❌ Ошибка слушателя транзакций:', error);
+      this.showSyncStatus('error', 'Ошибка синхронизации транзакций');
+      // Пытаемся переподключиться через 5 секунд
+      setTimeout(() => {
+        console.log('🔄 Попытка переподключения слушателя транзакций...');
+        this.setupDataListeners();
+      }, 5000);
     });
 
     // Слушатель целей
@@ -150,6 +176,41 @@ class FirebaseSync {
     });
 
     console.log('👂 Слушатели данных настроены');
+  }
+
+  // Запуск периодической проверки соединения
+  startHeartbeat() {
+    // Проверяем каждые 30 секунд
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isInitialized && this.isOnline) {
+        // Проверяем подключение к Firebase
+        const connectedRef = this.database.ref('.info/connected');
+        connectedRef.once('value', (snapshot) => {
+          if (snapshot.val() === true) {
+            console.log('💓 Heartbeat: соединение активно');
+          } else {
+            console.log('💔 Heartbeat: соединение потеряно');
+            this.showSyncStatus('offline', 'Переподключение...');
+            // Пытаемся переподключиться
+            setTimeout(() => this.forcSync(), 1000);
+          }
+        }).catch((error) => {
+          console.log('💔 Heartbeat: ошибка проверки соединения', error);
+          this.showSyncStatus('error', 'Проблемы с соединением');
+        });
+      }
+    }, 30000); // Каждые 30 секунд
+    
+    console.log('💓 Heartbeat запущен (проверка каждые 30 сек)');
+  }
+
+  // Остановка heartbeat
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      console.log('💔 Heartbeat остановлен');
+    }
   }
 
   // Обработка изменения статуса сети
@@ -193,17 +254,20 @@ class FirebaseSync {
       
       if (transactions.length > 0) {
         const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
-        console.log('📤 Отправляем в Firebase:', transactionsRef.toString());
+        const sendTime = new Date().toLocaleTimeString();
+        console.log(`📤 [${sendTime}] Отправляем в Firebase:`, transactionsRef.toString());
         
         for (const transaction of transactions) {
           if (!transaction.firebaseId) {
             transaction.firebaseId = transactionsRef.push().key;
             transaction.syncedAt = timestamp;
             transaction.userId = userId;
-            console.log('➕ Новая транзакция:', transaction.firebaseId, transaction.amount, transaction.description);
+            console.log(`➕ [${sendTime}] Новая транзакция:`, transaction.firebaseId, transaction.amount, transaction.description);
           }
           await transactionsRef.child(transaction.firebaseId).set(transaction);
         }
+        
+        this.showSyncStatus('success', `Отправлено в ${sendTime}`);
       }
 
       // Отправляем цели
@@ -509,8 +573,45 @@ class FirebaseSync {
       return;
     }
 
-    this.showSyncStatus('syncing', 'Синхронизация...');
+    this.showSyncStatus('syncing', 'Принудительная синхронизация...');
+    
+    // Сначала отправляем локальные данные
     await this.syncToFirebase();
+    
+    // Затем принудительно проверяем обновления
+    if (this.isInitialized) {
+      try {
+        const familyId = this.getFamilyId();
+        const familyRef = this.database.ref(`families/${familyId}`);
+        
+        // Принудительно получаем последние данные
+        const transactionsSnapshot = await familyRef.child('transactions').once('value');
+        const firebaseTransactions = transactionsSnapshot.val() || {};
+        
+        console.log('🔄 Принудительное обновление - получено транзакций:', Object.keys(firebaseTransactions).length);
+        this.mergeTransactions(firebaseTransactions);
+        
+      } catch (error) {
+        console.error('❌ Ошибка принудительной синхронизации:', error);
+        this.showSyncStatus('error', 'Ошибка принудительной синхронизации');
+      }
+    }
+  }
+
+  // Переподключение всех слушателей
+  reconnectListeners() {
+    console.log('🔄 Переподключение всех слушателей...');
+    
+    // Останавливаем старые слушатели
+    if (this.isInitialized) {
+      const familyId = this.getFamilyId();
+      const familyRef = this.database.ref(`families/${familyId}`);
+      familyRef.off(); // Отключаем все слушатели
+    }
+    
+    // Запускаем заново
+    this.setupDataListeners();
+    this.showSyncStatus('success', 'Слушатели переподключены');
   }
 }
 
@@ -587,4 +688,64 @@ window.reinitializeFirebase = function() {
       alert('Firebase переинициализирован');
     });
   }
+};
+
+// Функция для тестирования скорости синхронизации
+window.testSyncSpeed = function() {
+  if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
+    alert('Firebase не инициализирован');
+    return;
+  }
+  
+  const startTime = Date.now();
+  console.log('⏱️ Тест скорости синхронизации начат в:', new Date().toLocaleTimeString());
+  
+  // Добавляем тестовую транзакцию
+  const testTransaction = {
+    id: 'test_' + Date.now(),
+    type: 'expense',
+    amount: 1,
+    description: 'ТЕСТ СКОРОСТИ',
+    category: 'Прочее',
+    date: new Date().toISOString().split('T')[0],
+    timestamp: Date.now()
+  };
+  
+  // Сохраняем локально
+  const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+  transactions.push(testTransaction);
+  localStorage.setItem('transactions', JSON.stringify(transactions));
+  
+  // Отправляем в Firebase
+  window.firebaseSync.syncToFirebase().then(() => {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(`⏱️ Тест завершен за ${duration}ms`);
+    alert(`Тест скорости: ${duration}ms`);
+  });
+};
+
+// Функция для переподключения слушателей
+window.reconnectListeners = function() {
+  if (window.firebaseSync) {
+    window.firebaseSync.reconnectListeners();
+  } else {
+    alert('Firebase не инициализирован');
+  }
+};
+
+// Функция для проверки статуса соединения
+window.checkConnectionStatus = function() {
+  if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
+    alert('Firebase не инициализирован');
+    return;
+  }
+  
+  const connectedRef = window.firebaseSync.database.ref('.info/connected');
+  connectedRef.once('value', (snapshot) => {
+    const isConnected = snapshot.val();
+    const status = isConnected ? '✅ Подключено' : '❌ Отключено';
+    console.log('🔍 Статус соединения:', status);
+    alert(`Firebase: ${status}`);
+  });
 };
