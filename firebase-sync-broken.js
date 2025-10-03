@@ -493,6 +493,31 @@ class FirebaseSync {
       this.showSyncStatus('error', 'Ошибка удаления: ' + error.message);
     }
   }
+        console.log('� Транзакция удалена из Firebase:', firebaseId);
+      }
+      
+      // Если нет firebaseId, ищем по другим полям
+      if (!firebaseId && transactionId) {
+        const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
+        const snapshot = await transactionsRef.once('value');
+        const allTransactions = snapshot.val() || {};
+        
+        // Ищем транзакцию по локальному ID
+        for (const [fbId, transaction] of Object.entries(allTransactions)) {
+          if (transaction.id === transactionId) {
+            await transactionsRef.child(fbId).remove();
+            console.log('🔥 Транзакция найдена и удалена из Firebase по ID:', fbId);
+            break;
+          }
+        }
+      }
+      
+      this.showSyncStatus('success', 'Транзакция удалена');
+    } catch (error) {
+      console.error('❌ Ошибка удаления из Firebase:', error);
+      this.showSyncStatus('error', 'Ошибка удаления: ' + error.message);
+    }
+  }
 
   // Принудительная очистка удаленных транзакций
   async cleanupDeletedTransactions() {
@@ -575,279 +600,476 @@ class FirebaseSync {
     if (!syncIndicator) {
       syncIndicator = document.createElement('div');
       syncIndicator.id = 'syncIndicator';
-      syncIndicator.style.position = 'fixed';
-      syncIndicator.style.top = '10px';
-      syncIndicator.style.right = '10px';
-      syncIndicator.style.zIndex = '10000';
-      syncIndicator.style.padding = '8px 12px';
-      syncIndicator.style.borderRadius = '20px';
-      syncIndicator.style.fontSize = '12px';
-      syncIndicator.style.fontWeight = 'bold';
-      syncIndicator.style.transition = 'all 0.3s ease';
-      syncIndicator.style.maxWidth = '200px';
-      syncIndicator.style.textAlign = 'center';
+      syncIndicator.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        z-index: 9999;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        max-width: 250px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      `;
       document.body.appendChild(syncIndicator);
     }
 
-    // Стили в зависимости от типа
+    let icon, color;
     switch (type) {
       case 'success':
-        syncIndicator.style.backgroundColor = '#4CAF50';
-        syncIndicator.style.color = 'white';
-        syncIndicator.innerHTML = `✅ ${message}`;
-        break;
-      case 'error':
-        syncIndicator.style.backgroundColor = '#f44336';
-        syncIndicator.style.color = 'white';
-        syncIndicator.innerHTML = `❌ ${message}`;
+        icon = '✅';
+        color = '#10b981';
         break;
       case 'syncing':
-        syncIndicator.style.backgroundColor = '#2196F3';
-        syncIndicator.style.color = 'white';
-        syncIndicator.innerHTML = `🔄 ${message}`;
+        icon = '🔄';
+        color = '#3b82f6';
         break;
       case 'offline':
-        syncIndicator.style.backgroundColor = '#FF9800';
-        syncIndicator.style.color = 'white';
-        syncIndicator.innerHTML = `📵 ${message}`;
+        icon = '📵';
+        color = '#6b7280';
+        break;
+      case 'error':
+        icon = '❌';
+        color = '#ef4444';
         break;
       default:
-        syncIndicator.style.backgroundColor = '#9E9E9E';
-        syncIndicator.style.color = 'white';
-        syncIndicator.innerHTML = message;
+        icon = 'ℹ️';
+        color = '#8b5cf6';
     }
 
-    // Показываем индикатор
-    syncIndicator.style.opacity = '1';
-    syncIndicator.style.transform = 'translateY(0)';
+    syncIndicator.innerHTML = `
+      <span>${icon}</span>
+      <span>${message}</span>
+      <span style="margin-left: 8px; opacity: 0.6; font-weight: normal; user-select: none;" onclick="this.parentElement.style.display='none'">✖</span>
+    `;
+    syncIndicator.style.backgroundColor = color;
+    syncIndicator.style.color = 'white';
 
-    // Скрываем через 3 секунды (кроме ошибок и офлайн)
-    if (type !== 'error' && type !== 'offline') {
+    // Полное скрытие для успешной синхронизации
+    if (type === 'success') {
       setTimeout(() => {
         syncIndicator.style.opacity = '0';
-        syncIndicator.style.transform = 'translateY(-20px)';
-      }, 3000);
+        syncIndicator.style.pointerEvents = 'none';
+      }, 2000);
+      setTimeout(() => {
+        syncIndicator.style.display = 'none';
+      }, 2500);
+    } else {
+      syncIndicator.style.opacity = '1';
+      syncIndicator.style.pointerEvents = 'auto';
+      syncIndicator.style.display = 'flex';
     }
   }
 
   // Принудительная синхронизация
   async forcSync() {
-    console.log('🔄 Принудительная синхронизация...');
-    this.showSyncStatus('syncing', 'Принудительная синхронизация...');
-    await this.syncToFirebase();
-  }
-
-  // Улучшенная очистка всех данных с сохранением в Firebase
-  async clearAllData() {
-    if (!this.isInitialized || !this.isOnline) {
-      console.log('⚠️ Очистка без подключения к Firebase - только локально');
-      // Локальная очистка
-      localStorage.removeItem('transactions');
-      localStorage.removeItem('goals');
-      localStorage.removeItem('categories');
-      localStorage.removeItem('deletedTransactions');
-      this.showSyncStatus('success', 'Локальные данные очищены');
-      
-      // Обновляем интерфейс
-      if (window.renderTransactionHistory) window.renderTransactionHistory();
-      if (window.updateDashboard) window.updateDashboard();
-      if (window.calculateBalance) window.calculateBalance();
+    if (!this.isOnline) {
+      this.showSyncStatus('offline', 'Нет соединения');
       return;
     }
 
-    try {
-      console.log('🧹 Начинаем полную очистку данных...');
-      this.showSyncStatus('syncing', 'Очистка данных...');
-      
+    this.showSyncStatus('syncing', 'Принудительная синхронизация...');
+    
+    // Сначала отправляем локальные данные
+    await this.syncToFirebase();
+    
+    // Затем принудительно проверяем обновления
+    if (this.isInitialized) {
+      try {
+        const familyId = this.getFamilyId();
+        const familyRef = this.database.ref(`families/${familyId}`);
+        
+        // Принудительно получаем последние данные
+        const transactionsSnapshot = await familyRef.child('transactions').once('value');
+        const firebaseTransactions = transactionsSnapshot.val() || {};
+        
+        console.log('🔄 Принудительное обновление - получено транзакций:', Object.keys(firebaseTransactions).length);
+        this.mergeTransactions(firebaseTransactions);
+        
+      } catch (error) {
+        console.error('❌ Ошибка принудительной синхронизации:', error);
+        this.showSyncStatus('error', 'Ошибка принудительной синхронизации');
+      }
+    }
+  }
+
+  // Переподключение всех слушателей
+  reconnectListeners() {
+    console.log('🔄 Переподключение всех слушателей...');
+    
+    // Останавливаем старые слушатели
+    if (this.isInitialized) {
       const familyId = this.getFamilyId();
       const familyRef = this.database.ref(`families/${familyId}`);
-      
-      // Очищаем Firebase
-      await familyRef.remove();
-      console.log('☁️ Firebase данные очищены');
-      
-      // Очищаем localStorage
-      localStorage.removeItem('transactions');
-      localStorage.removeItem('goals');
-      localStorage.removeItem('categories');
-      localStorage.removeItem('deletedTransactions');
-      console.log('📱 Локальные данные очищены');
-      
-      this.showSyncStatus('success', 'Все данные очищены');
-      
-      // Принудительное обновление интерфейса
-      setTimeout(() => {
-        if (window.renderTransactionHistory) {
-          window.renderTransactionHistory();
-        }
-        if (window.updateDashboard) {
-          window.updateDashboard();
-        }
-        if (window.calculateBalance) {
-          window.calculateBalance();
-        }
-        
-        // Дополнительное событие для полного обновления
-        window.dispatchEvent(new Event('dataCleared'));
-        console.log('🔄 Интерфейс полностью обновлен после очистки');
-      }, 500);
-      
-    } catch (error) {
-      console.error('❌ Ошибка очистки данных:', error);
-      this.showSyncStatus('error', 'Ошибка очистки: ' + error.message);
+      familyRef.off(); // Отключаем все слушатели
     }
-  }
-
-  // Получение статистики синхронизации
-  getSyncStats() {
-    const stats = {
-      isInitialized: this.isInitialized,
-      isOnline: this.isOnline,
-      lastSyncTime: this.lastSyncTime,
-      familyId: this.getFamilyId(),
-      userId: this.getUserId(),
-      localTransactions: JSON.parse(localStorage.getItem('transactions') || '[]').length,
-      deletedTransactions: JSON.parse(localStorage.getItem('deletedTransactions') || '[]').length
-    };
     
-    console.log('📊 Статистика синхронизации:', stats);
-    return stats;
-  }
-
-  // Экспорт данных для резервного копирования
-  exportData() {
-    const data = {
-      timestamp: new Date().toISOString(),
-      familyId: this.getFamilyId(),
-      userId: this.getUserId(),
-      transactions: JSON.parse(localStorage.getItem('transactions') || '[]'),
-      goals: JSON.parse(localStorage.getItem('goals') || '[]'),
-      categories: JSON.parse(localStorage.getItem('categories') || '[]'),
-      deletedTransactions: JSON.parse(localStorage.getItem('deletedTransactions') || '[]')
-    };
-    
-    console.log('📦 Экспорт данных:', data);
-    return data;
-  }
-
-  // Импорт данных из резервной копии
-  async importData(data) {
-    try {
-      console.log('📥 Импорт данных...', data);
-      
-      if (data.transactions) {
-        localStorage.setItem('transactions', JSON.stringify(data.transactions));
-      }
-      if (data.goals) {
-        localStorage.setItem('goals', JSON.stringify(data.goals));
-      }
-      if (data.categories) {
-        localStorage.setItem('categories', JSON.stringify(data.categories));
-      }
-      if (data.deletedTransactions) {
-        localStorage.setItem('deletedTransactions', JSON.stringify(data.deletedTransactions));
-      }
-      
-      // Синхронизируем с Firebase
-      await this.syncToFirebase();
-      
-      this.showSyncStatus('success', 'Данные импортированы');
-      console.log('✅ Данные успешно импортированы');
-      
-    } catch (error) {
-      console.error('❌ Ошибка импорта данных:', error);
-      this.showSyncStatus('error', 'Ошибка импорта: ' + error.message);
-    }
+    // Запускаем заново
+    this.setupDataListeners();
+    this.showSyncStatus('success', 'Слушатели переподключены');
   }
 }
 
-// Глобальные функции для управления синхронизацией
+// Инициализация синхронизации
+window.firebaseSync = null;
+
+// Функция для инициализации Firebase
 window.initFirebaseSync = function() {
   if (!window.firebaseSync) {
     window.firebaseSync = new FirebaseSync();
-    console.log('🔥 Firebase синхронизация инициализирована');
   }
   return window.firebaseSync;
 };
 
-window.syncToFirebase = function() {
+// Функция для добавления в очередь синхронизации
+window.queueForSync = function(data) {
   if (window.firebaseSync) {
     window.firebaseSync.syncToFirebase();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
   }
 };
 
-window.deleteFromFirebase = function(transactionId, firebaseId) {
+// Функция для удаления транзакции из Firebase
+window.deleteTransactionFromFirebase = function(transactionId, firebaseId) {
   if (window.firebaseSync) {
     window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
   }
 };
 
-window.forcSyncFirebase = function() {
+// Функция для показа текущего Family ID
+window.showFamilyId = function() {
+  const familyId = localStorage.getItem('familyId') || 'не установлен';
+  const deletedCount = JSON.parse(localStorage.getItem('deletedTransactions') || '[]').length;
+  const message = `
+🏠 ID семьи: ${familyId}
+🗑️ Удаленных транзакций: ${deletedCount}
+📱 Устройство: ${navigator.userAgent.includes('Mobile') ? 'Мобильное' : 'Компьютер'}
+
+⚠️ Для синхронизации ID семьи должен быть одинаковым на всех устройствах!`;
+  
+  console.log('👨‍👩‍👧‍👦 Family ID Info:', {
+    familyId,
+    deletedCount,
+    isMobile: navigator.userAgent.includes('Mobile')
+  });
+  
+  window.firebaseSync?.showSyncStatus('success', `Family ID: ${familyId}`);
+};
+
+// Функция для смены Family ID
+window.changeFamilyId = function() {
   if (window.firebaseSync) {
-    window.firebaseSync.forcSync();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
+    window.firebaseSync.changeFamilyId();
   }
 };
 
-window.clearAllData = function() {
-  if (window.firebaseSync) {
-    window.firebaseSync.clearAllData();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
-  }
-};
-
+// Функция для принудительной очистки удаленных транзакций
 window.cleanupDeletedTransactions = function() {
   if (window.firebaseSync) {
     window.firebaseSync.cleanupDeletedTransactions();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
   }
 };
 
-window.getSyncStats = function() {
+// Функция для сброса списка удаленных транзакций (для отладки)
+window.resetDeletedTransactions = function() {
+  localStorage.removeItem('deletedTransactions');
+  console.log('🧹 Список удаленных транзакций очищен');
+  window.firebaseSync?.showSyncStatus('success', 'Список удаленных сброшен');
+};
+
+// Функция для принудительной повторной инициализации Firebase
+window.reinitializeFirebase = function() {
   if (window.firebaseSync) {
-    return window.firebaseSync.getSyncStats();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
-    return null;
+    console.log('🔄 Принудительная реинициализация Firebase...');
+    window.firebaseSync.showSyncStatus('syncing', 'Переинициализация...');
+    window.firebaseSync.init().then(() => {
+      console.log('✅ Firebase переинициализирован');
+      window.firebaseSync.showSyncStatus('success', 'Firebase переинициализирован');
+    });
   }
 };
 
-window.exportData = function() {
-  if (window.firebaseSync) {
-    return window.firebaseSync.exportData();
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
-    return null;
+// Функция для тестирования скорости синхронизации
+window.testSyncSpeed = function() {
+  if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
+    return;
   }
-};
-
-window.importData = function(data) {
-  if (window.firebaseSync) {
-    window.firebaseSync.importData(data);
-  } else {
-    console.log('⚠️ Firebase синхронизация не инициализирована');
-  }
-};
-
-// Инициализация при загрузке скрипта
-console.log('🔥 Firebase синхронизация загружена');
-
-// Автоматическая инициализация при загрузке страницы
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      window.initFirebaseSync();
-    }, 1000);
+  
+  const startTime = Date.now();
+  console.log('⏱️ Тест скорости синхронизации начат в:', new Date().toLocaleTimeString());
+  window.firebaseSync.showSyncStatus('syncing', 'Тестирование скорости...');
+  
+  // Простая проверка соединения без создания тестовых данных
+  const connectedRef = window.firebaseSync.database.ref('.info/connected');
+  connectedRef.once('value', (snapshot) => {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    const isConnected = snapshot.val();
+    
+    if (isConnected) {
+      console.log(`⏱️ Тест соединения завершен за ${duration}ms`);
+      window.firebaseSync.showSyncStatus('success', `Соединение: ${duration}ms`);
+    } else {
+      console.log('❌ Нет соединения с Firebase');
+      window.firebaseSync.showSyncStatus('error', 'Нет соединения');
+    }
+  }).catch(error => {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.error('❌ Ошибка теста соединения:', error);
+    window.firebaseSync.showSyncStatus('error', `Ошибка: ${duration}ms`);
   });
-} else {
+};
+
+// Функция для переподключения слушателей
+window.reconnectListeners = function() {
+  if (window.firebaseSync) {
+    window.firebaseSync.reconnectListeners();
+  } else {
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
+  }
+};
+
+// Функция для проверки статуса соединения
+window.checkConnectionStatus = function() {
+  if (!window.firebaseSync || !window.firebaseSync.isInitialized) {
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
+    return;
+  }
+  
+  const connectedRef = window.firebaseSync.database.ref('.info/connected');
+  connectedRef.once('value', (snapshot) => {
+    const isConnected = snapshot.val();
+    const status = isConnected ? '✅ Подключено' : '❌ Отключено';
+    console.log('🔍 Статус соединения:', status);
+    window.firebaseSync.showSyncStatus(isConnected ? 'success' : 'error', status);
+  });
+};
+
+// Функция для полной синхронизации и обновления интерфейса
+window.fullSync = function() {
+  if (!window.firebaseSync) {
+    console.log('❌ Firebase не инициализирован');
+    window.firebaseSync?.showSyncStatus('error', 'Firebase не подключен');
+    return;
+  }
+  
+  console.log('🔄 Запуск полной синхронизации...');
+  window.firebaseSync.showSyncStatus('syncing', 'Полная синхронизация...');
+  
+  // Принудительная синхронизация
+  window.firebaseSync.forcSync().then(() => {
+    // Обновляем все компоненты интерфейса
+    setTimeout(() => {
+      if (window.updateDashboard) {
+        window.updateDashboard();
+        console.log('💰 Дашборд обновлен');
+      }
+      if (window.renderTransactionHistory) {
+        window.renderTransactionHistory();
+        console.log('📜 История транзакций обновлена');
+      }
+      if (window.calculateBalance) {
+        window.calculateBalance();
+        console.log('💰 Баланс пересчитан');
+      }
+      if (window.renderGoals) {
+        window.renderGoals();
+        console.log('🎯 Цели обновлены');
+      }
+      
+      window.firebaseSync.showSyncStatus('success', 'Полная синхронизация завершена');
+      console.log('✅ Полная синхронизация завершена!');
+    }, 500);
+  });
+};
+
+// Функция диагностики всех проблем
+window.diagnoseProblem = function() {
+  console.log('🔧 === ДИАГНОСТИКА ПРОБЛЕМ ===');
+  
+  // Проверка Firebase
+  console.log('1. Firebase SDK:', typeof firebase !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
+  console.log('2. Firebase Sync:', window.firebaseSync ? '✅ Инициализирован' : '❌ Не инициализирован');
+  
+  if (window.firebaseSync) {
+    console.log('3. Firebase инициализирован:', window.firebaseSync.isInitialized ? '✅ Да' : '❌ Нет');
+    console.log('4. Онлайн статус:', window.firebaseSync.isOnline ? '✅ Онлайн' : '❌ Офлайн');
+  }
+  
+  // Проверка локальных данных
+  const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+  console.log('5. Локальные транзакции:', transactions.length);
+  console.log('6. Firebase ID у транзакций:', transactions.filter(t => t.firebaseId).length);
+  
+  // Проверка Family ID
+  const familyId = localStorage.getItem('familyId');
+  console.log('7. Family ID:', familyId || 'Не установлен');
+  
+  // Проверка соединения с Firebase
+  if (window.firebaseSync && window.firebaseSync.isInitialized) {
+    const connectedRef = window.firebaseSync.database.ref('.info/connected');
+    connectedRef.once('value', (snapshot) => {
+      console.log('8. Соединение с Firebase:', snapshot.val() ? '✅ Активно' : '❌ Потеряно');
+    });
+    
+    // Проверка данных в Firebase
+    const familyRef = window.firebaseSync.database.ref(`families/${familyId}/transactions`);
+    familyRef.once('value', (snapshot) => {
+      const fbTransactions = snapshot.val() || {};
+      console.log('9. Транзакции в Firebase:', Object.keys(fbTransactions).length);
+      console.log('📊 Структура Firebase:', fbTransactions);
+    });
+  }
+  
+  console.log('🔧 === КОНЕЦ ДИАГНОСТИКИ ===');
+  window.firebaseSync?.showSyncStatus('success', 'Диагностика завершена - смотрите консоль');
+};
+
+// Функция полной очистки всех данных
+window.clearAllData = async function() {
+  const confirmed = confirm(`
+🗑️ ПОЛНАЯ ОЧИСТКА ДАННЫХ
+
+Это действие удалит:
+• Все транзакции (локально и в Firebase)
+• Все цели
+• Все категории
+• Все настройки
+• Family ID и User ID
+
+⚠️ ЭТО НЕОБРАТИМО!
+
+Продолжить?`);
+  
+  if (!confirmed) return;
+  
+  const doubleConfirm = confirm(`
+❌ ПОСЛЕДНЕЕ ПРЕДУПРЕЖДЕНИЕ!
+
+Вы уверены, что хотите удалить ВСЕ данные?
+Восстановить их будет невозможно!
+
+Введите "УДАЛИТЬ" для подтверждения:`);
+  
+  if (!doubleConfirm) return;
+  
+  const finalConfirm = prompt('Введите "УДАЛИТЬ" для подтверждения:');
+  if (finalConfirm !== 'УДАЛИТЬ') {
+    alert('Очистка отменена');
+    return;
+  }
+  
+  console.log('🗑️ Начинаем полную очистку данных...');
+  
+  // 1. Останавливаем все слушатели Firebase
+  if (window.firebaseSync && window.firebaseSync.isInitialized) {
+    const familyId = localStorage.getItem('familyId');
+    if (familyId) {
+      try {
+        // Отключаем все слушатели
+        const familyRef = window.firebaseSync.database.ref(`families/${familyId}`);
+        familyRef.off();
+        
+        // Удаляем данные из Firebase
+        await familyRef.remove();
+        console.log('🔥 Данные удалены из Firebase');
+        
+        // Также очищаем весь узел семьи для полной гарантии
+        const rootRef = window.firebaseSync.database.ref(`families`);
+        const snapshot = await rootRef.once('value');
+        const families = snapshot.val() || {};
+        
+        // Если есть другие семьи с похожими ID, тоже удаляем (на случай дублей)
+        for (const [fId, fData] of Object.entries(families)) {
+          if (fId.includes(familyId.split('_')[1]) || familyId.includes(fId.split('_')[1])) {
+            await rootRef.child(fId).remove();
+            console.log('🔥 Удален дублирующий Family ID:', fId);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Ошибка удаления из Firebase:', error);
+      }
+    }
+  }
+  
+  // 2. Полная очистка localStorage - удаляем ВСЁ связанное с приложением
+  const allKeys = Object.keys(localStorage);
+  const appKeys = allKeys.filter(key => 
+    key.includes('transaction') || 
+    key.includes('goal') || 
+    key.includes('budget') || 
+    key.includes('category') || 
+    key.includes('template') || 
+    key.includes('recurring') || 
+    key.includes('family') || 
+    key.includes('user') || 
+    key.includes('sync') || 
+    key.includes('deleted') ||
+    key.includes('setting') ||
+    key.includes('backup') ||
+    key.includes('notification') ||
+    ['transactions', 'goals', 'categories', 'budgets', 'templates', 'recurringTransactions', 'familyId', 'userId', 'lastSyncTime', 'monthlyBudget', 'deletedTransactions', 'lastBackup', 'notificationSettings', 'appSettings'].includes(key)
+  );
+  
+  appKeys.forEach(key => {
+    localStorage.removeItem(key);
+    console.log(`🗑️ Удален ${key}`);
+  });
+  
+  // Дополнительная проверка - удаляем стандартные ключи
+  const standardKeys = [
+    'transactions', 'goals', 'categories', 'deletedTransactions', 'familyId', 'userId', 'lastSyncTime', 
+    'monthlyBudget', 'recurringTransactions', 'templates', 'lastBackup', 'notificationSettings', 'appSettings',
+    'budgets', 'currentUser', 'syncQueue', 'offlineQueue'
+  ];
+  
+  standardKeys.forEach(key => {
+    localStorage.removeItem(key);
+    console.log(`🗑️ Принудительно удален ${key}`);
+  });
+  
+  // 3. Сбрасываем глобальные перемены (если есть)
+  if (typeof transactions !== 'undefined') window.transactions = [];
+  if (typeof goals !== 'undefined') window.goals = [];
+  if (typeof categories !== 'undefined') window.categories = [];
+  
+  // 4. Останавливаем Firebase Sync
+  if (window.firebaseSync) {
+    window.firebaseSync.stopHeartbeat();
+    window.firebaseSync = null;
+  }
+  
+  console.log('✅ Полная очистка завершена');
+  
+  alert(`
+✅ ВСЕ ДАННЫЕ УДАЛЕНЫ!
+
+• Локальные данные: очищены
+• Firebase данные: удалены  
+• Настройки: сброшены
+
+Страница будет перезагружена для применения изменений.`);
+  
+  // Перезагружаем страницу для полного сброса
   setTimeout(() => {
-    window.initFirebaseSync();
-  }, 1000);
-}
+    window.location.reload();
+  }, 2000);
+};
+
+// Исправленная функция удаления транзакции из Firebase
+window.deleteTransactionFromFirebaseFixed = function(transactionId, firebaseId) {
+  if (window.firebaseSync && window.firebaseSync.isInitialized && window.firebaseSync.isOnline) {
+    window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
+  }
+};
