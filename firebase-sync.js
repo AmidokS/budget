@@ -151,6 +151,18 @@ class FirebaseSync {
       }
       
       this.mergeTransactions(firebaseTransactions);
+      
+      // Принудительное обновление баланса после каждого изменения
+      setTimeout(() => {
+        if (window.updateDashboard) {
+          window.updateDashboard();
+          console.log('💰 Дашборд принудительно обновлен');
+        }
+        if (window.calculateBalance) {
+          window.calculateBalance();
+          console.log('💰 Баланс принудительно пересчитан');
+        }
+      }, 100);
     }, (error) => {
       console.error('❌ Ошибка слушателя транзакций:', error);
       this.showSyncStatus('error', 'Ошибка синхронизации транзакций');
@@ -356,13 +368,26 @@ class FirebaseSync {
     console.log('✅ Итого после объединения:', mergedTransactions.length, 'транзакций');
     localStorage.setItem('transactions', JSON.stringify(mergedTransactions));
     
-    // Обновляем интерфейс
+    // Принудительно обновляем интерфейс
     if (window.renderTransactionHistory) {
       window.renderTransactionHistory();
     }
     if (window.updateDashboard) {
       window.updateDashboard();
     }
+    
+    // Дополнительные обновления для полной синхронизации
+    if (window.updateBalance) {
+      window.updateBalance();
+    }
+    if (window.calculateBalance) {
+      window.calculateBalance();
+    }
+    
+    // Принудительное обновление через событие
+    window.dispatchEvent(new Event('transactionsUpdated'));
+    
+    console.log('🔄 Интерфейс принудительно обновлен после синхронизации');
   }
 
   // Удаление транзакции из Firebase
@@ -747,5 +772,40 @@ window.checkConnectionStatus = function() {
     const status = isConnected ? '✅ Подключено' : '❌ Отключено';
     console.log('🔍 Статус соединения:', status);
     alert(`Firebase: ${status}`);
+  });
+};
+
+// Функция для полной синхронизации и обновления интерфейса
+window.fullSync = function() {
+  if (!window.firebaseSync) {
+    alert('Firebase не инициализирован');
+    return;
+  }
+  
+  console.log('🔄 Запуск полной синхронизации...');
+  
+  // Принудительная синхронизация
+  window.firebaseSync.forcSync().then(() => {
+    // Обновляем все компоненты интерфейса
+    setTimeout(() => {
+      if (window.updateDashboard) {
+        window.updateDashboard();
+        console.log('💰 Дашборд обновлен');
+      }
+      if (window.renderTransactionHistory) {
+        window.renderTransactionHistory();
+        console.log('📜 История транзакций обновлена');
+      }
+      if (window.calculateBalance) {
+        window.calculateBalance();
+        console.log('💰 Баланс пересчитан');
+      }
+      if (window.renderGoals) {
+        window.renderGoals();
+        console.log('🎯 Цели обновлены');
+      }
+      
+      alert('Полная синхронизация завершена!');
+    }, 500);
   });
 };
