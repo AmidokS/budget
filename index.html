@@ -19,9 +19,19 @@
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <!-- Firebase SDK - множественные fallbacks -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- Fallback для Firebase -->
+    <script>
+      // Проверяем загрузку Firebase и пытаемся альтернативную версию
+      if (typeof firebase === 'undefined') {
+        console.log('🔄 Загружаем альтернативную версию Firebase...');
+        document.write('<script src="https://firebase.googleapis.com/9.22.0/firebase-app-compat.js"><\/script>');
+        document.write('<script src="https://firebase.googleapis.com/9.22.0/firebase-database-compat.js"><\/script>');
+      }
+    </script>
     
     <link rel="stylesheet" href="gradient-settings.css" />
     <link rel="stylesheet" href="style.css" />
@@ -90,6 +100,12 @@
           onclick="openModal('settingsModal'); closeBurgerMenu();"
         >
           ⚙️ Настройки
+        </button>
+        <button
+          class="burger-item"
+          onclick="showFamilyId(); closeBurgerMenu();"
+        >
+          🏠 ID семьи
         </button>
       </div>
     </div>
@@ -429,6 +445,40 @@
               style="flex: 1;"
             >
               📱 Установить приложение
+            </button>
+          </div>
+          
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button
+              onclick="cleanupDeletedTransactions()"
+              class="btn btn-warning"
+              style="flex: 1; font-size: 0.8em;"
+            >
+              🧹 Очистить удаленные
+            </button>
+            <button
+              onclick="reinitializeFirebase()"
+              class="btn btn-info"
+              style="flex: 1; font-size: 0.8em;"
+            >
+              🔄 Переподключить
+            </button>
+          </div>
+          
+          <div style="display: flex; gap: 10px; margin-top: 5px;">
+            <button
+              onclick="resetDeletedTransactions()"
+              class="btn btn-danger"
+              style="flex: 1; font-size: 0.8em;"
+            >
+              �️ Сбросить список
+            </button>
+            <button
+              onclick="window.location.reload(true)"
+              class="btn btn-secondary"
+              style="flex: 1; font-size: 0.8em;"
+            >
+              🔄 Перезагрузить
             </button>
           </div>
 

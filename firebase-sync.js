@@ -22,10 +22,27 @@ class FirebaseSync {
   }
 
   async init() {
+    // Ждем загрузки Firebase SDK
+    let attempts = 0;
+    while (typeof firebase === 'undefined' && attempts < 10) {
+      console.log('⏳ Ждем загрузку Firebase SDK... Попытка:', attempts + 1);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
+    
+    if (typeof firebase === 'undefined') {
+      console.error('❌ Firebase SDK не загружен после 10 попыток');
+      this.showSyncStatus('error', 'Ошибка загрузки Firebase SDK');
+      return false;
+    }
+    
     try {
       // Инициализация Firebase
       if (!firebase.apps.length) {
         firebase.initializeApp(this.firebaseConfig);
+        console.log('✅ Firebase приложение инициализировано');
+      } else {
+        console.log('ℹ️ Firebase уже инициализирован');
       }
       
       this.database = firebase.database();
@@ -49,8 +66,35 @@ class FirebaseSync {
       
     } catch (error) {
       console.error('❌ Ошибка инициализации Firebase:', error);
-      this.showSyncStatus('error', 'Ошибка подключения к серверу');
+      this.showSyncStatus('error', 'Ошибка подключения к серверу. Работаем в локальном режиме.');
+      
+      // Включаем локальный режим без синхронизации
+      this.isInitialized = false;
+      return false;
     }
+  }
+
+  // Проверка доступности Firebase
+  checkFirebaseAvailability() {
+    if (typeof firebase === 'undefined') {
+      console.log('🔄 Firebase недоступен, пробуем загрузить повторно...');
+      
+      // Попытка загрузить Firebase динамически
+      const script1 = document.createElement('script');
+      script1.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+      script1.onload = () => {
+        const script2 = document.createElement('script');
+        script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js';
+        script2.onload = () => {
+          console.log('✅ Firebase загружен динамически');
+          this.init(); // Повторная попытка инициализации
+        };
+        document.head.appendChild(script2);
+      };
+      document.head.appendChild(script1);
+      return false;
+    }
+    return true;
   }
 
   // Генерация уникального ID пользователя
@@ -124,6 +168,11 @@ class FirebaseSync {
 
   // Синхронизация локальных данных с Firebase
   async syncToFirebase() {
+    if (!this.checkFirebaseAvailability()) {
+      console.log('⚠️ Firebase недоступен');
+      return;
+    }
+    
     if (!this.isInitialized || !this.isOnline) {
       console.log('⚠️ Синхронизация пропущена - не инициализирован или офлайн');
       return;
@@ -493,7 +542,20 @@ window.deleteTransactionFromFirebase = function(transactionId, firebaseId) {
 // Функция для показа текущего Family ID
 window.showFamilyId = function() {
   const familyId = localStorage.getItem('familyId') || 'не установлен';
-  alert(`Текущий ID семьи: ${familyId}`);
+  const deletedCount = JSON.parse(localStorage.getItem('deletedTransactions') || '[]').length;
+  const message = `
+🏠 ID семьи: ${familyId}
+🗑️ Удаленных транзакций: ${deletedCount}
+📱 Устройство: ${navigator.userAgent.includes('Mobile') ? 'Мобильное' : 'Компьютер'}
+
+⚠️ Для синхронизации ID семьи должен быть одинаковым на всех устройствах!`;
+  
+  alert(message);
+  console.log('👨‍👩‍👧‍👦 Family ID Info:', {
+    familyId,
+    deletedCount,
+    isMobile: navigator.userAgent.includes('Mobile')
+  });
 };
 
 // Функция для смены Family ID
@@ -515,4 +577,14 @@ window.resetDeletedTransactions = function() {
   localStorage.removeItem('deletedTransactions');
   console.log('🧹 Список удаленных транзакций очищен');
   alert('Список удаленных транзакций сброшен');
+};
+
+// Функция для принудительной повторной инициализации Firebase
+window.reinitializeFirebase = function() {
+  if (window.firebaseSync) {
+    console.log('🔄 Принудительная реинициализация Firebase...');
+    window.firebaseSync.init().then(() => {
+      alert('Firebase переинициализирован');
+    });
+  }
 };
