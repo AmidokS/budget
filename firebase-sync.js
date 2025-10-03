@@ -32,6 +32,8 @@ class FirebaseSync {
       this.isInitialized = true;
       
       console.log('🔥 Firebase инициализирован');
+      console.log('📊 Firebase config:', this.firebaseConfig);
+      console.log('🌐 Database URL:', this.database.ref().toString());
       
       // Подписка на изменения онлайн статуса
       window.addEventListener('online', () => this.handleOnlineChange(true));
@@ -79,22 +81,27 @@ class FirebaseSync {
 
     const familyId = this.getFamilyId();
     const familyRef = this.database.ref(`families/${familyId}`);
+    
+    console.log('👂 Настраиваем слушатели для семьи:', familyId);
 
     // Слушатель транзакций
     familyRef.child('transactions').on('value', (snapshot) => {
       const firebaseTransactions = snapshot.val() || {};
+      console.log('📥 Получены транзакции из Firebase:', Object.keys(firebaseTransactions).length);
       this.mergeTransactions(firebaseTransactions);
     });
 
     // Слушатель целей
     familyRef.child('goals').on('value', (snapshot) => {
       const firebaseGoals = snapshot.val() || {};
+      console.log('📥 Получены цели из Firebase:', Object.keys(firebaseGoals).length);
       this.mergeGoals(firebaseGoals);
     });
 
     // Слушатель категорий
     familyRef.child('categories').on('value', (snapshot) => {
       const firebaseCategories = snapshot.val() || {};
+      console.log('📥 Получены категории из Firebase:', Object.keys(firebaseCategories).length);
       this.mergeCategories(firebaseCategories);
     });
 
@@ -117,22 +124,34 @@ class FirebaseSync {
 
   // Синхронизация локальных данных с Firebase
   async syncToFirebase() {
-    if (!this.isInitialized || !this.isOnline) return;
+    if (!this.isInitialized || !this.isOnline) {
+      console.log('⚠️ Синхронизация пропущена - не инициализирован или офлайн');
+      return;
+    }
 
     try {
       const familyId = this.getFamilyId();
       const userId = this.getUserId();
       const timestamp = Date.now();
+      
+      console.log('🔄 Начинаем синхронизацию...');
+      console.log('👨‍👩‍👧‍👦 Family ID:', familyId);
+      console.log('👤 User ID:', userId);
 
       // Отправляем транзакции
       const transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+      console.log('💰 Транзакций для синхронизации:', transactions.length);
+      
       if (transactions.length > 0) {
         const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
+        console.log('📤 Отправляем в Firebase:', transactionsRef.toString());
+        
         for (const transaction of transactions) {
           if (!transaction.firebaseId) {
             transaction.firebaseId = transactionsRef.push().key;
             transaction.syncedAt = timestamp;
             transaction.userId = userId;
+            console.log('➕ Новая транзакция:', transaction.firebaseId, transaction.amount, transaction.description);
           }
           await transactionsRef.child(transaction.firebaseId).set(transaction);
         }
