@@ -1,0 +1,12 @@
+<!-- Временная иконка 96x96 -->
+<svg width="96" height="96" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg96" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6d28d9"/>
+      <stop offset="100%" style="stop-color:#4c1d95"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="16" fill="url(#bg96)"/>
+  <circle cx="48" cy="48" r="24" fill="#f59e0b" stroke="white" stroke-width="3"/>
+  <text x="48" y="59" font-family="Arial" font-size="32" font-weight="bold" fill="white" text-anchor="middle">₽</text>
+</svg>

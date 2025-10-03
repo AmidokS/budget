@@ -1,0 +1,12 @@
+<!-- Временная иконка 512x512 для PWA -->
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6d28d9"/>
+      <stop offset="100%" style="stop-color:#4c1d95"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="85" fill="url(#bg512)"/>
+  <circle cx="256" cy="256" r="128" fill="#f59e0b" stroke="white" stroke-width="12"/>
+  <text x="256" y="315" font-family="Arial" font-size="170" font-weight="bold" fill="white" text-anchor="middle">₽</text>
+</svg>

@@ -1,0 +1,6 @@
+<!-- Временная иконка 16x16 для favicon -->
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+  <rect width="16" height="16" rx="3" fill="#6d28d9"/>
+  <circle cx="8" cy="8" r="4" fill="#f59e0b"/>
+  <text x="8" y="11" font-family="Arial" font-size="6" fill="white" text-anchor="middle">₽</text>
+</svg>

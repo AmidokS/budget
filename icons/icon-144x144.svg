@@ -1,0 +1,12 @@
+<!-- Временная иконка 144x144 -->
+<svg width="144" height="144" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg144" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6d28d9"/>
+      <stop offset="100%" style="stop-color:#4c1d95"/>
+    </linearGradient>
+  </defs>
+  <rect width="144" height="144" rx="24" fill="url(#bg144)"/>
+  <circle cx="72" cy="72" r="36" fill="#f59e0b" stroke="white" stroke-width="4"/>
+  <text x="72" y="89" font-family="Arial" font-size="48" font-weight="bold" fill="white" text-anchor="middle">₽</text>
+</svg>

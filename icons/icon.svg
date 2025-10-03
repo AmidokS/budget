@@ -1,0 +1,32 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон градиент -->
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6d28d9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4c1d95;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="coinGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="512" height="512" rx="90" fill="url(#backgroundGradient)"/>
+  
+  <!-- Монета большая -->
+  <circle cx="200" cy="200" r="80" fill="url(#coinGradient)" stroke="#fff" stroke-width="8"/>
+  <text x="200" y="220" font-family="Arial, sans-serif" font-size="60" font-weight="bold" fill="#fff" text-anchor="middle">₴</text>
+  
+  <!-- Монета средняя -->
+  <circle cx="320" cy="280" r="60" fill="url(#coinGradient)" stroke="#fff" stroke-width="6"/>
+  <text x="320" y="295" font-family="Arial, sans-serif" font-size="45" font-weight="bold" fill="#fff" text-anchor="middle">€</text>
+  
+  <!-- Монета маленькая -->
+  <circle cx="380" cy="180" r="40" fill="url(#coinGradient)" stroke="#fff" stroke-width="4"/>
+  <text x="380" y="195" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="#fff" text-anchor="middle">$</text>
+  
+  <!-- Заголовок -->
+  <text x="256" y="420" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#fff" text-anchor="middle">НАШ</text>
+  <text x="256" y="470" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#e0e7ff" text-anchor="middle">БЮДЖЕТ</text>
+</svg>
