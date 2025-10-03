@@ -2095,7 +2095,10 @@
           console.log('⚠️ Событие beforeinstallprompt не доступно');
           
           const isAndroid = /Android/i.test(navigator.userAgent);
-          const isChrome = /Chrome/i.test(navigator.userAgent);
+          const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+          const isChrome = /Chrome/i.test(navigator.userAgent) && !/Edge/i.test(navigator.userAgent);
+          const isSafari = /Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
+          const isOpera = /Opera|OPR/i.test(navigator.userAgent);
           const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
           
           if (isStandalone) {
@@ -2105,19 +2108,44 @@
             return;
           }
           
-          let message = '📱 Для установки приложения:\n\n';
+          let message = '📱 Инструкция по установке:\n\n';
           
-          if (isAndroid && isChrome) {
-            message += '1. Нажмите меню Chrome (⋮)\n';
-            message += '2. Выберите "Добавить на главный экран"\n';
-            message += '3. Нажмите "Добавить"';
+          if (isiOS) {
+            if (isSafari) {
+              message += '🍎 Для iPhone/iPad в Safari:\n';
+              message += '1. Нажмите кнопку "Поделиться" (⬆️) внизу экрана\n';
+              message += '2. Найдите "На экран Домой" в списке\n';
+              message += '3. Нажмите "Добавить"';
+            } else {
+              message += '🍎 Для iPhone/iPad:\n';
+              message += '1. Откройте эту страницу в Safari (не Chrome!)\n';
+              message += '2. Нажмите "Поделиться" (⬆️)\n';
+              message += '3. Выберите "На экран Домой"';
+            }
           } else if (isAndroid) {
-            message += '1. Откройте эту страницу в Google Chrome\n';
-            message += '2. Нажмите меню Chrome (⋮)\n';
-            message += '3. Выберите "Добавить на главный экран"';
+            if (isOpera) {
+              message += '🤖 Opera плохо поддерживает PWA.\n';
+              message += 'Рекомендуется:\n';
+              message += '1. Открыть в Google Chrome\n';
+              message += '2. Меню Chrome (⋮)\n';
+              message += '3. "Установить приложение"';
+            } else if (isChrome) {
+              message += '🤖 Для Android в Chrome:\n';
+              message += '1. Нажмите меню Chrome (⋮)\n';
+              message += '2. Выберите "Установить приложение"\n';
+              message += '3. Нажмите "Установить"\n';
+              message += '\n💡 Приложение может появиться в списке всех приложений, а не на рабочем столе';
+            } else {
+              message += '🤖 Для Android:\n';
+              message += '1. Откройте эту страницу в Google Chrome\n';
+              message += '2. Нажмите меню Chrome (⋮)\n';
+              message += '3. Выберите "Установить приложение"';
+            }
           } else {
-            message += '1. Откройте эту страницу в Chrome или Safari\n';
-            message += '2. Добавьте на главный экран через меню браузера';
+            message += '💻 Для компьютера:\n';
+            message += '1. Откройте в Chrome или Edge\n';
+            message += '2. Нажмите на иконку установки в адресной строке\n';
+            message += '3. Или используйте меню браузера';
           }
           
           alert(message);
