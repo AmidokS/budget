@@ -2,12 +2,12 @@
   "name": "Наш Бюджет - Совместный контроль финансов",
   "short_name": "Наш Бюджет",
   "description": "Приложение для совместного ведения семейного бюджета с синхронизацией в реальном времени",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#1a1b2e",
   "theme_color": "#6d28d9",
   "orientation": "portrait-primary",
-  "scope": "/",
+  "scope": "./",
   "categories": ["finance", "productivity", "utilities"],
   "icons": [
     {

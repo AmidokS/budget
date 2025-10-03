@@ -2075,6 +2075,8 @@
       
       // Функция для установки PWA
       window.installPWA = function() {
+        console.log('🔧 Попытка установки PWA...');
+        
         if (deferredPrompt) {
           deferredPrompt.prompt();
           deferredPrompt.userChoice.then((result) => {
@@ -2083,9 +2085,42 @@
               if (window.notifications) {
                 window.notifications.show('✅ Приложение успешно установлено!', 'success');
               }
+            } else {
+              console.log('❌ Установка отклонена');
             }
             deferredPrompt = null;
           });
+        } else {
+          // Fallback для случаев, когда beforeinstallprompt не сработал
+          console.log('⚠️ Событие beforeinstallprompt не доступно');
+          
+          const isAndroid = /Android/i.test(navigator.userAgent);
+          const isChrome = /Chrome/i.test(navigator.userAgent);
+          const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+          
+          if (isStandalone) {
+            if (window.notifications) {
+              window.notifications.show('ℹ️ Приложение уже установлено!', 'info');
+            }
+            return;
+          }
+          
+          let message = '📱 Для установки приложения:\n\n';
+          
+          if (isAndroid && isChrome) {
+            message += '1. Нажмите меню Chrome (⋮)\n';
+            message += '2. Выберите "Добавить на главный экран"\n';
+            message += '3. Нажмите "Добавить"';
+          } else if (isAndroid) {
+            message += '1. Откройте эту страницу в Google Chrome\n';
+            message += '2. Нажмите меню Chrome (⋮)\n';
+            message += '3. Выберите "Добавить на главный экран"';
+          } else {
+            message += '1. Откройте эту страницу в Chrome или Safari\n';
+            message += '2. Добавьте на главный экран через меню браузера';
+          }
+          
+          alert(message);
         }
       };
     </script>
