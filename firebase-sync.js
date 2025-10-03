@@ -144,6 +144,7 @@ class FirebaseSync {
       const firebaseTransactions = snapshot.val() || {};
       const timestamp = new Date().toLocaleTimeString();
       console.log(`📥 [${timestamp}] Получены транзакции из Firebase:`, Object.keys(firebaseTransactions).length);
+      console.log('🔍 Firebase data structure:', firebaseTransactions);
       
       // Показываем мгновенное уведомление
       if (Object.keys(firebaseTransactions).length > 0) {
@@ -248,6 +249,7 @@ class FirebaseSync {
     
     if (!this.isInitialized || !this.isOnline) {
       console.log('⚠️ Синхронизация пропущена - не инициализирован или офлайн');
+      console.log('Debug: isInitialized=', this.isInitialized, 'isOnline=', this.isOnline);
       return;
     }
 
@@ -272,14 +274,19 @@ class FirebaseSync {
         let hasNewTransactions = false;
         
         for (const transaction of transactions) {
-          if (!transaction.firebaseId) {
-            transaction.firebaseId = transactionsRef.push().key;
-            transaction.syncedAt = timestamp;
-            transaction.userId = userId;
-            hasNewTransactions = true;
-            console.log(`➕ [${sendTime}] Новая транзакция:`, transaction.firebaseId, transaction.amount, transaction.description);
+          try {
+            if (!transaction.firebaseId) {
+              transaction.firebaseId = transactionsRef.push().key;
+              transaction.syncedAt = timestamp;
+              transaction.userId = userId;
+              hasNewTransactions = true;
+              console.log(`➕ [${sendTime}] Новая транзакция:`, transaction.firebaseId, transaction.amount, transaction.description);
+            }
+            await transactionsRef.child(transaction.firebaseId).set(transaction);
+            console.log(`✅ Транзакция отправлена:`, transaction.firebaseId);
+          } catch (error) {
+            console.error(`❌ Ошибка отправки транзакции ${transaction.id}:`, error);
           }
-          await transactionsRef.child(transaction.firebaseId).set(transaction);
         }
         
         // Сохраняем обновленные транзакции с firebaseId в localStorage
@@ -817,4 +824,46 @@ window.fullSync = function() {
       alert('Полная синхронизация завершена!');
     }, 500);
   });
+};
+
+// Функция диагностики всех проблем
+window.diagnoseProblem = function() {
+  console.log('🔧 === ДИАГНОСТИКА ПРОБЛЕМ ===');
+  
+  // Проверка Firebase
+  console.log('1. Firebase SDK:', typeof firebase !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
+  console.log('2. Firebase Sync:', window.firebaseSync ? '✅ Инициализирован' : '❌ Не инициализирован');
+  
+  if (window.firebaseSync) {
+    console.log('3. Firebase инициализирован:', window.firebaseSync.isInitialized ? '✅ Да' : '❌ Нет');
+    console.log('4. Онлайн статус:', window.firebaseSync.isOnline ? '✅ Онлайн' : '❌ Офлайн');
+  }
+  
+  // Проверка локальных данных
+  const transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
+  console.log('5. Локальные транзакции:', transactions.length);
+  console.log('6. Firebase ID у транзакций:', transactions.filter(t => t.firebaseId).length);
+  
+  // Проверка Family ID
+  const familyId = localStorage.getItem('familyId');
+  console.log('7. Family ID:', familyId || 'Не установлен');
+  
+  // Проверка соединения с Firebase
+  if (window.firebaseSync && window.firebaseSync.isInitialized) {
+    const connectedRef = window.firebaseSync.database.ref('.info/connected');
+    connectedRef.once('value', (snapshot) => {
+      console.log('8. Соединение с Firebase:', snapshot.val() ? '✅ Активно' : '❌ Потеряно');
+    });
+    
+    // Проверка данных в Firebase
+    const familyRef = window.firebaseSync.database.ref(`families/${familyId}/transactions`);
+    familyRef.once('value', (snapshot) => {
+      const fbTransactions = snapshot.val() || {};
+      console.log('9. Транзакции в Firebase:', Object.keys(fbTransactions).length);
+      console.log('📊 Структура Firebase:', fbTransactions);
+    });
+  }
+  
+  console.log('🔧 === КОНЕЦ ДИАГНОСТИКИ ===');
+  alert('Диагностика завершена. Смотрите результаты в консоли (F12).');
 };
