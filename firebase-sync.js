@@ -867,3 +867,102 @@ window.diagnoseProblem = function() {
   console.log('🔧 === КОНЕЦ ДИАГНОСТИКИ ===');
   alert('Диагностика завершена. Смотрите результаты в консоли (F12).');
 };
+
+// Функция полной очистки всех данных
+window.clearAllData = function() {
+  const confirmed = confirm(`
+🗑️ ПОЛНАЯ ОЧИСТКА ДАННЫХ
+
+Это действие удалит:
+• Все транзакции (локально и в Firebase)
+• Все цели
+• Все категории
+• Все настройки
+• Family ID и User ID
+
+⚠️ ЭТО НЕОБРАТИМО!
+
+Продолжить?`);
+  
+  if (!confirmed) return;
+  
+  const doubleConfirm = confirm(`
+❌ ПОСЛЕДНЕЕ ПРЕДУПРЕЖДЕНИЕ!
+
+Вы уверены, что хотите удалить ВСЕ данные?
+Восстановить их будет невозможно!
+
+Введите "УДАЛИТЬ" для подтверждения:`);
+  
+  if (!doubleConfirm) return;
+  
+  const finalConfirm = prompt('Введите "УДАЛИТЬ" для подтверждения:');
+  if (finalConfirm !== 'УДАЛИТЬ') {
+    alert('Очистка отменена');
+    return;
+  }
+  
+  console.log('🗑️ Начинаем полную очистку данных...');
+  
+  // 1. Очищаем Firebase (если подключен)
+  if (window.firebaseSync && window.firebaseSync.isInitialized) {
+    const familyId = localStorage.getItem('familyId');
+    if (familyId) {
+      const familyRef = window.firebaseSync.database.ref(`families/${familyId}`);
+      familyRef.remove().then(() => {
+        console.log('🔥 Данные удалены из Firebase');
+      }).catch((error) => {
+        console.error('❌ Ошибка удаления из Firebase:', error);
+      });
+    }
+  }
+  
+  // 2. Очищаем localStorage
+  const keysToRemove = [
+    'transactions',
+    'goals', 
+    'categories',
+    'deletedTransactions',
+    'familyId',
+    'userId',
+    'lastSyncTime',
+    'monthlyBudget',
+    'recurringTransactions',
+    'templates',
+    'lastBackup',
+    'notificationSettings',
+    'appSettings'
+  ];
+  
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+    console.log(`🗑️ Удален ${key}`);
+  });
+  
+  // 3. Сбрасываем глобальные перемены (если есть)
+  if (typeof transactions !== 'undefined') window.transactions = [];
+  if (typeof goals !== 'undefined') window.goals = [];
+  if (typeof categories !== 'undefined') window.categories = [];
+  
+  // 4. Останавливаем Firebase Sync
+  if (window.firebaseSync) {
+    window.firebaseSync.stopHeartbeat();
+    window.firebaseSync = null;
+  }
+  
+  console.log('✅ Полная очистка завершена');
+  
+  alert(`
+✅ ВСЕ ДАННЫЕ УДАЛЕНЫ!
+
+• Локальные данные: очищены
+• Firebase данные: удалены  
+• Настройки: сброшены
+
+Страница будет перезагружена для применения изменений.`);
+  
+  // Перезагружаем страницу для полного сброса
+  setTimeout(() => {
+    window.location.reload();
+  }, 2000);
+};
