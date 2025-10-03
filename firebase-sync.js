@@ -409,13 +409,21 @@ class FirebaseSync {
 
   // Удаление транзакции из Firebase
   async deleteTransactionFromFirebase(transactionId, firebaseId) {
-    if (!this.isInitialized || !this.isOnline) {
-      console.log('⚠️ Удаление отложено - нет подключения к Firebase');
+    console.log('🔍 deleteTransactionFromFirebase вызвана с параметрами:', { transactionId, firebaseId });
+    
+    if (!this.isInitialized) {
+      console.log('⚠️ Firebase не инициализирован, удаление отложено');
+      return;
+    }
+    
+    if (!this.isOnline) {
+      console.log('⚠️ Нет подключения к интернету, удаление отложено');
       return;
     }
 
     try {
       const familyId = this.getFamilyId();
+      console.log('👨‍👩‍👧‍👦 Family ID для удаления:', familyId);
       
       console.log('🗑️ Начинаем удаление транзакции:', { transactionId, firebaseId });
       
@@ -434,21 +442,26 @@ class FirebaseSync {
       // Удаляем из Firebase
       if (firebaseId) {
         const transactionRef = this.database.ref(`families/${familyId}/transactions/${firebaseId}`);
+        console.log('🔥 Удаляем транзакцию из Firebase по firebaseId:', transactionRef.toString());
         await transactionRef.remove();
-        console.log('🔥 Транзакция удалена из Firebase:', firebaseId);
+        console.log('✅ Транзакция удалена из Firebase:', firebaseId);
       }
       
       // Если нет firebaseId, ищем по другим полям
       if (!firebaseId && transactionId) {
+        console.log('🔍 firebaseId отсутствует, ищем транзакцию по ID:', transactionId);
         const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
         const snapshot = await transactionsRef.once('value');
         const allTransactions = snapshot.val() || {};
         
+        console.log('📋 Всего транзакций в Firebase:', Object.keys(allTransactions).length);
+        
         // Ищем транзакцию по локальному ID
         for (const [fbId, transaction] of Object.entries(allTransactions)) {
           if (transaction.id === transactionId) {
+            console.log('🎯 Найдена транзакция для удаления:', fbId, transaction);
             await transactionsRef.child(fbId).remove();
-            console.log('🔥 Транзакция найдена и удалена из Firebase по ID:', fbId);
+            console.log('✅ Транзакция найдена и удалена из Firebase по ID:', fbId);
             
             // Добавляем и этот firebaseId в список удаленных
             if (!deletedTransactions.includes(fbId)) {
@@ -466,6 +479,7 @@ class FirebaseSync {
       // Ждем немного и проверяем что удаление прошло успешно
       setTimeout(async () => {
         try {
+          console.log('🔍 Проверяем успешность удаления...');
           const checkRef = this.database.ref(`families/${familyId}/transactions`);
           const checkSnapshot = await checkRef.once('value');
           const remainingTransactions = checkSnapshot.val() || {};
@@ -482,6 +496,8 @@ class FirebaseSync {
           
           if (!found) {
             console.log('✅ Подтверждено: транзакция успешно удалена из Firebase');
+          } else {
+            console.log('⚠️ Транзакция все еще присутствует в Firebase после повторного удаления');
           }
         } catch (error) {
           console.error('❌ Ошибка проверки удаления:', error);
@@ -779,6 +795,14 @@ window.syncToFirebase = function() {
 };
 
 window.deleteFromFirebase = function(transactionId, firebaseId) {
+  if (window.firebaseSync) {
+    window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
+  } else {
+    console.log('⚠️ Firebase синхронизация не инициализирована');
+  }
+};
+
+window.deleteTransactionFromFirebase = function(transactionId, firebaseId) {
   if (window.firebaseSync) {
     window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
   } else {
