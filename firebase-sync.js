@@ -269,14 +269,23 @@ class FirebaseSync {
         const sendTime = new Date().toLocaleTimeString();
         console.log(`📤 [${sendTime}] Отправляем в Firebase:`, transactionsRef.toString());
         
+        let hasNewTransactions = false;
+        
         for (const transaction of transactions) {
           if (!transaction.firebaseId) {
             transaction.firebaseId = transactionsRef.push().key;
             transaction.syncedAt = timestamp;
             transaction.userId = userId;
+            hasNewTransactions = true;
             console.log(`➕ [${sendTime}] Новая транзакция:`, transaction.firebaseId, transaction.amount, transaction.description);
           }
           await transactionsRef.child(transaction.firebaseId).set(transaction);
+        }
+        
+        // Сохраняем обновленные транзакции с firebaseId в localStorage
+        if (hasNewTransactions) {
+          localStorage.setItem('transactions', JSON.stringify(transactions));
+          console.log('💾 Локальные транзакции обновлены с firebaseId');
         }
         
         this.showSyncStatus('success', `Отправлено в ${sendTime}`);

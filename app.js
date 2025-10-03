@@ -2674,6 +2674,14 @@ function saveTransactions() {
     renderTransactions();
     updateDailyIncomeStats();
     updateCharts();
+    
+    // Автоматическая синхронизация с Firebase
+    setTimeout(() => {
+      if (window.firebaseSync && window.firebaseSync.isInitialized) {
+        window.firebaseSync.syncToFirebase();
+        console.log('🔄 Автоматическая синхронизация после сохранения транзакций');
+      }
+    }, 100);
   } catch (error) {
     showNotification("Ошибка сохранения транзакций", "error");
     console.error("Save transactions error:", error);
