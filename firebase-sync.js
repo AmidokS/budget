@@ -201,34 +201,46 @@ class FirebaseSync {
   mergeTransactions(firebaseTransactions) {
     const localTransactions = JSON.parse(localStorage.getItem('transactions')) || [];
     const deletedTransactions = JSON.parse(localStorage.getItem('deletedTransactions')) || [];
-    const mergedTransactions = [...localTransactions];
+    
+    console.log('🔄 Начинаем объединение транзакций...');
+    console.log('📱 Локальных транзакций:', localTransactions.length);
+    console.log('☁️ Firebase транзакций:', Object.keys(firebaseTransactions).length);
+    console.log('🗑️ Удаленных транзакций:', deletedTransactions.length);
 
+    // Начинаем с локальных транзакций
+    let mergedTransactions = [...localTransactions];
+
+    // Проходим по транзакциям из Firebase
     Object.values(firebaseTransactions).forEach(firebaseTransaction => {
       // Проверяем, не была ли транзакция удалена локально
-      const isDeleted = deletedTransactions.some(deletedId => 
-        deletedId === firebaseTransaction.firebaseId || deletedId === firebaseTransaction.id
-      );
+      const isDeletedByFirebaseId = deletedTransactions.includes(firebaseTransaction.firebaseId);
+      const isDeletedById = deletedTransactions.includes(firebaseTransaction.id);
       
-      if (isDeleted) {
-        console.log('🗑️ Пропускаем удаленную транзакцию:', firebaseTransaction.firebaseId);
+      if (isDeletedByFirebaseId || isDeletedById) {
+        console.log('🗑️ Пропускаем удаленную транзакцию:', firebaseTransaction.firebaseId || firebaseTransaction.id);
         return; // Не добавляем удаленные транзакции
       }
 
       const existingIndex = mergedTransactions.findIndex(
-        t => t.firebaseId === firebaseTransaction.firebaseId || t.id === firebaseTransaction.id
+        t => t.firebaseId === firebaseTransaction.firebaseId || 
+             t.id === firebaseTransaction.id ||
+             (t.firebaseId && t.firebaseId === firebaseTransaction.firebaseId)
       );
 
       if (existingIndex === -1) {
         // Новая транзакция с сервера
-        console.log('➕ Добавляем новую транзакцию с сервера:', firebaseTransaction.firebaseId);
+        console.log('➕ Добавляем новую транзакцию с сервера:', firebaseTransaction.firebaseId || firebaseTransaction.id);
         mergedTransactions.push(firebaseTransaction);
-      } else if (firebaseTransaction.syncedAt > (mergedTransactions[existingIndex].syncedAt || 0)) {
-        // Обновленная транзакция с сервера
-        console.log('🔄 Обновляем транзакцию с сервера:', firebaseTransaction.firebaseId);
+      } else if (firebaseTransaction.syncedAt && firebaseTransaction.syncedAt > (mergedTransactions[existingIndex].syncedAt || 0)) {
+        // Обновленная транзакция с сервера (более новая)
+        console.log('🔄 Обновляем транзакцию с сервера:', firebaseTransaction.firebaseId || firebaseTransaction.id);
         mergedTransactions[existingIndex] = firebaseTransaction;
+      } else {
+        console.log('⏭️ Пропускаем устаревшую транзакцию с сервера:', firebaseTransaction.firebaseId || firebaseTransaction.id);
       }
     });
 
+    console.log('✅ Итого после объединения:', mergedTransactions.length, 'транзакций');
     localStorage.setItem('transactions', JSON.stringify(mergedTransactions));
     
     // Обновляем интерфейс
@@ -242,7 +254,10 @@ class FirebaseSync {
 
   // Удаление транзакции из Firebase
   async deleteTransactionFromFirebase(transactionId, firebaseId) {
-    if (!this.isInitialized || !this.isOnline) return;
+    if (!this.isInitialized || !this.isOnline) {
+      console.log('⚠️ Удаление отложено - нет подключения к Firebase');
+      return;
+    }
 
     try {
       const familyId = this.getFamilyId();
@@ -251,9 +266,11 @@ class FirebaseSync {
       const deletedTransactions = JSON.parse(localStorage.getItem('deletedTransactions')) || [];
       if (firebaseId && !deletedTransactions.includes(firebaseId)) {
         deletedTransactions.push(firebaseId);
+        console.log('🗑️ Добавлен в список удаленных (firebaseId):', firebaseId);
       }
       if (transactionId && !deletedTransactions.includes(transactionId)) {
         deletedTransactions.push(transactionId);
+        console.log('🗑️ Добавлен в список удаленных (id):', transactionId);
       }
       localStorage.setItem('deletedTransactions', JSON.stringify(deletedTransactions));
       
@@ -261,13 +278,55 @@ class FirebaseSync {
       if (firebaseId) {
         const transactionRef = this.database.ref(`families/${familyId}/transactions/${firebaseId}`);
         await transactionRef.remove();
-        console.log('🗑️ Транзакция удалена из Firebase:', firebaseId);
+        console.log('� Транзакция удалена из Firebase:', firebaseId);
+      }
+      
+      // Если нет firebaseId, ищем по другим полям
+      if (!firebaseId && transactionId) {
+        const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
+        const snapshot = await transactionsRef.once('value');
+        const allTransactions = snapshot.val() || {};
+        
+        // Ищем транзакцию по локальному ID
+        for (const [fbId, transaction] of Object.entries(allTransactions)) {
+          if (transaction.id === transactionId) {
+            await transactionsRef.child(fbId).remove();
+            console.log('🔥 Транзакция найдена и удалена из Firebase по ID:', fbId);
+            break;
+          }
+        }
       }
       
       this.showSyncStatus('success', 'Транзакция удалена');
     } catch (error) {
       console.error('❌ Ошибка удаления из Firebase:', error);
-      this.showSyncStatus('error', 'Ошибка удаления');
+      this.showSyncStatus('error', 'Ошибка удаления: ' + error.message);
+    }
+  }
+
+  // Принудительная очистка удаленных транзакций
+  async cleanupDeletedTransactions() {
+    const deletedTransactions = JSON.parse(localStorage.getItem('deletedTransactions')) || [];
+    if (deletedTransactions.length === 0) return;
+
+    console.log('🧹 Очистка удаленных транзакций:', deletedTransactions.length);
+    
+    try {
+      const familyId = this.getFamilyId();
+      const transactionsRef = this.database.ref(`families/${familyId}/transactions`);
+      
+      for (const deletedId of deletedTransactions) {
+        try {
+          await transactionsRef.child(deletedId).remove();
+          console.log('🗑️ Очищена из Firebase:', deletedId);
+        } catch (error) {
+          console.log('⚠️ Не удалось очистить:', deletedId, error.message);
+        }
+      }
+      
+      this.showSyncStatus('success', `Очищено ${deletedTransactions.length} удаленных транзакций`);
+    } catch (error) {
+      console.error('❌ Ошибка очистки:', error);
     }
   }
 
@@ -429,4 +488,31 @@ window.deleteTransactionFromFirebase = function(transactionId, firebaseId) {
   if (window.firebaseSync) {
     window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
   }
+};
+
+// Функция для показа текущего Family ID
+window.showFamilyId = function() {
+  const familyId = localStorage.getItem('familyId') || 'не установлен';
+  alert(`Текущий ID семьи: ${familyId}`);
+};
+
+// Функция для смены Family ID
+window.changeFamilyId = function() {
+  if (window.firebaseSync) {
+    window.firebaseSync.changeFamilyId();
+  }
+};
+
+// Функция для принудительной очистки удаленных транзакций
+window.cleanupDeletedTransactions = function() {
+  if (window.firebaseSync) {
+    window.firebaseSync.cleanupDeletedTransactions();
+  }
+};
+
+// Функция для сброса списка удаленных транзакций (для отладки)
+window.resetDeletedTransactions = function() {
+  localStorage.removeItem('deletedTransactions');
+  console.log('🧹 Список удаленных транзакций очищен');
+  alert('Список удаленных транзакций сброшен');
 };
