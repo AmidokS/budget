@@ -341,20 +341,12 @@ function openModal(modalId) {
     
     if (modalId === 'incomeModal') {
       const incomeDate = document.getElementById("incomeDate");
-      const incomePerson = document.getElementById("incomePerson");
       if (incomeDate) incomeDate.value = today;
-      if (incomePerson && currentUser !== "common") {
-        incomePerson.value = currentUser;
-      }
     }
     
     if (modalId === 'expenseModal') {
       const expenseDate = document.getElementById("expenseDate");
-      const expensePerson = document.getElementById("expensePerson");
       if (expenseDate) expenseDate.value = today;
-      if (expensePerson && currentUser !== "common") {
-        expensePerson.value = currentUser;
-      }
     }
     
     if (modalId === 'editTransactionModal') {
@@ -718,7 +710,6 @@ function initApp() {
   setupIconPicker();
   setupEventListeners();
   setupTransactionFilters();
-  setupUserSelector();
   initializeSettings();
   renderTransactions(); // Вызываем после настройки фильтров
   renderQuickTemplates(); // Инициализируем шаблоны
@@ -809,6 +800,22 @@ function setupIconPicker() {
   });
 }
 
+// Принудительная синхронизация после удаления
+function forceSyncAfterDelete() {
+  if (window.firebaseSync && window.firebaseSync.isInitialized) {
+    setTimeout(() => {
+      window.firebaseSync.forcSync();
+      console.log('🔄 Принудительная синхронизация после удаления');
+    }, 500);
+    
+    // Дополнительная синхронизация через 2 секунды для гарантии
+    setTimeout(() => {
+      window.firebaseSync.forcSync();
+      console.log('🔄 Повторная синхронизация для гарантии');
+    }, 2000);
+  }
+}
+
 // ========== ОБРАБОТКА ТРАНЗАКЦИЙ ==========
 
 function handleIncomeSubmit(e) {
@@ -819,11 +826,6 @@ function handleIncomeSubmit(e) {
   const category = document.getElementById("incomeCategory").value;
   const description = document.getElementById("incomeDescription").value;
   const date = document.getElementById("incomeDate").value;
-
-  // Если выбран конкретный пользователь, используем его
-  if (currentUser !== "common") {
-    person = currentUser;
-  }
 
   if (!amount || amount <= 0) {
     showNotification("Введите корректную сумму", "error");
@@ -890,11 +892,6 @@ function handleExpenseSubmit(e) {
   const category = document.getElementById("expenseCategory").value;
   const description = document.getElementById("expenseDescription").value;
   const date = document.getElementById("expenseDate").value;
-
-  // Если выбран конкретный пользователь, используем его
-  if (currentUser !== "common") {
-    person = currentUser;
-  }
 
   if (!amount || amount <= 0) {
     showNotification("Введите корректную сумму", "error");
@@ -1107,11 +1104,6 @@ function renderTransactions() {
 
   // Используем новую систему фильтрации
   let filteredTransactions = getFilteredTransactions();
-  
-  // Фильтр по пользователю
-  if (currentUser !== "common") {
-    filteredTransactions = filteredTransactions.filter((t) => t.person === currentUser);
-  }
 
   // Сортировка: всегда по дате (новые сверху) для главного блока
   let sortedTransactions = [...filteredTransactions];
@@ -1827,30 +1819,6 @@ async function withdrawFromGoal(id) {
 }
 
 // Настройка селектора пользователя
-function setupUserSelector() {
-  const userSelect = document.getElementById("userSelect");
-  if (!userSelect) return;
-
-  // Устанавливаем обработчик изменения
-  userSelect.addEventListener("change", function() {
-    currentUser = this.value;
-    
-    // Обновляем все элементы интерфейса
-    renderTransactions();
-    updateDashboard();
-    
-    // Показываем уведомление о смене фильтра
-    let userName = "все операции";
-    if (currentUser === "arthur") userName = "операции Артура";
-    else if (currentUser === "lera") userName = "операции Леры";
-    
-    showNotification(`Отображаются: ${userName}`, "info");
-  });
-
-  // Устанавливаем начальное значение
-  currentUser = userSelect.value || "common";
-}
-
 // Функции для работы с вкладками настроек
 function switchSettingsTab(tabName) {
   // Убираем активный класс у всех вкладок
@@ -2108,11 +2076,8 @@ function updateDashboard() {
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
-  // Фильтруем транзакции по пользователю
+  // Используем все транзакции (больше нет фильтрации по пользователю)
   let userTransactions = transactions;
-  if (currentUser !== "common") {
-    userTransactions = transactions.filter((t) => t.person === currentUser);
-  }
 
   // Расчеты за текущий месяц
   const monthTransactions = userTransactions.filter((t) => {
@@ -2877,7 +2842,7 @@ function renderBudgetIndicators() {
     return;
   }
   
-  const budgetStatuses = budgets.map(budget => checkBudgetStatus(budget.category, currentUser)).filter(status => status !== null);
+  const budgetStatuses = budgets.map(budget => checkBudgetStatus(budget.category, "common")).filter(status => status !== null);
   
   if (budgetStatuses.length === 0) {
     budgetProgressBars.innerHTML = '<div style="text-align: center; color: var(--text-secondary); font-style: italic; padding: 20px;">Нет данных для отображения.<br><small>Добавьте операции для анализа бюджета</small></div>';
@@ -4015,6 +3980,9 @@ async function deleteTransactionDirect(id) {
         window.deleteTransactionFromFirebase(transaction.id, transaction.firebaseId);
       }
       
+      // Принудительная синхронизация после удаления
+      forceSyncAfterDelete();
+      
       transactions = transactions.filter((t) => t.id !== id);
       saveTransactions(); // saveTransactions уже обновляет localStorage и интерфейс
       showNotification("Транзакция удалена");
@@ -4029,6 +3997,9 @@ async function deleteTransactionDirect(id) {
     if (window.deleteTransactionFromFirebase) {
       window.deleteTransactionFromFirebase(transaction.id, transaction.firebaseId);
     }
+    
+    // Принудительная синхронизация после удаления
+    forceSyncAfterDelete();
     
     transactions = transactions.filter((t) => t.id !== id);
     saveTransactions(); // saveTransactions уже обновляет localStorage и интерфейс
@@ -4924,6 +4895,9 @@ window.deleteTransaction = async function(transactionId) {
     if (transactionToDelete && window.deleteTransactionFromFirebase) {
       window.deleteTransactionFromFirebase(transactionToDelete.id, transactionToDelete.firebaseId);
     }
+    
+    // Принудительная синхронизация после удаления
+    forceSyncAfterDelete();
     
     // Обновляем и глобальную переменную, и localStorage
     transactions = localTransactions;

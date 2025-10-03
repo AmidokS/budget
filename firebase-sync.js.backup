@@ -435,7 +435,7 @@ class FirebaseSync {
       if (firebaseId) {
         const transactionRef = this.database.ref(`families/${familyId}/transactions/${firebaseId}`);
         await transactionRef.remove();
-        
+        console.log('🔥 Транзакция удалена из Firebase:', firebaseId);
       }
       
       // Если нет firebaseId, ищем по другим полям
@@ -1065,11 +1065,4 @@ window.clearAllData = async function() {
   setTimeout(() => {
     window.location.reload();
   }, 2000);
-};
-
-// Исправленная функция удаления транзакции из Firebase
-window.deleteTransactionFromFirebaseFixed = function(transactionId, firebaseId) {
-  if (window.firebaseSync && window.firebaseSync.isInitialized && window.firebaseSync.isOnline) {
-    window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
-  }
 };
