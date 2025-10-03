@@ -4002,6 +4002,11 @@ async function deleteTransactionDirect(id) {
         decrementTemplateUsage(transaction.templateId);
       }
       
+      // Удаляем из Firebase
+      if (window.deleteTransactionFromFirebase) {
+        window.deleteTransactionFromFirebase(transaction.id, transaction.firebaseId);
+      }
+      
       transactions = transactions.filter((t) => t.id !== id);
       saveTransactions(); // saveTransactions уже обновляет localStorage и интерфейс
       showNotification("Транзакция удалена");
@@ -4010,6 +4015,11 @@ async function deleteTransactionDirect(id) {
     // Уменьшаем счетчик использования шаблона если транзакция была создана через шаблон
     if (transaction.templateId) {
       decrementTemplateUsage(transaction.templateId);
+    }
+    
+    // Удаляем из Firebase
+    if (window.deleteTransactionFromFirebase) {
+      window.deleteTransactionFromFirebase(transaction.id, transaction.firebaseId);
     }
     
     transactions = transactions.filter((t) => t.id !== id);
@@ -4900,6 +4910,11 @@ window.deleteTransaction = async function(transactionId) {
     // Уменьшаем счетчик использования шаблона если транзакция была создана через шаблон
     if (transactionToDelete && transactionToDelete.templateId) {
       decrementTemplateUsage(transactionToDelete.templateId);
+    }
+    
+    // Удаляем из Firebase
+    if (transactionToDelete && window.deleteTransactionFromFirebase) {
+      window.deleteTransactionFromFirebase(transactionToDelete.id, transactionToDelete.firebaseId);
     }
     
     // Обновляем и глобальную переменную, и localStorage

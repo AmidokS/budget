@@ -200,18 +200,31 @@ class FirebaseSync {
   // Объединение транзакций
   mergeTransactions(firebaseTransactions) {
     const localTransactions = JSON.parse(localStorage.getItem('transactions')) || [];
+    const deletedTransactions = JSON.parse(localStorage.getItem('deletedTransactions')) || [];
     const mergedTransactions = [...localTransactions];
 
     Object.values(firebaseTransactions).forEach(firebaseTransaction => {
+      // Проверяем, не была ли транзакция удалена локально
+      const isDeleted = deletedTransactions.some(deletedId => 
+        deletedId === firebaseTransaction.firebaseId || deletedId === firebaseTransaction.id
+      );
+      
+      if (isDeleted) {
+        console.log('🗑️ Пропускаем удаленную транзакцию:', firebaseTransaction.firebaseId);
+        return; // Не добавляем удаленные транзакции
+      }
+
       const existingIndex = mergedTransactions.findIndex(
         t => t.firebaseId === firebaseTransaction.firebaseId || t.id === firebaseTransaction.id
       );
 
       if (existingIndex === -1) {
         // Новая транзакция с сервера
+        console.log('➕ Добавляем новую транзакцию с сервера:', firebaseTransaction.firebaseId);
         mergedTransactions.push(firebaseTransaction);
       } else if (firebaseTransaction.syncedAt > (mergedTransactions[existingIndex].syncedAt || 0)) {
         // Обновленная транзакция с сервера
+        console.log('🔄 Обновляем транзакцию с сервера:', firebaseTransaction.firebaseId);
         mergedTransactions[existingIndex] = firebaseTransaction;
       }
     });
@@ -224,6 +237,37 @@ class FirebaseSync {
     }
     if (window.updateDashboard) {
       window.updateDashboard();
+    }
+  }
+
+  // Удаление транзакции из Firebase
+  async deleteTransactionFromFirebase(transactionId, firebaseId) {
+    if (!this.isInitialized || !this.isOnline) return;
+
+    try {
+      const familyId = this.getFamilyId();
+      
+      // Добавляем в список удаленных локально
+      const deletedTransactions = JSON.parse(localStorage.getItem('deletedTransactions')) || [];
+      if (firebaseId && !deletedTransactions.includes(firebaseId)) {
+        deletedTransactions.push(firebaseId);
+      }
+      if (transactionId && !deletedTransactions.includes(transactionId)) {
+        deletedTransactions.push(transactionId);
+      }
+      localStorage.setItem('deletedTransactions', JSON.stringify(deletedTransactions));
+      
+      // Удаляем из Firebase
+      if (firebaseId) {
+        const transactionRef = this.database.ref(`families/${familyId}/transactions/${firebaseId}`);
+        await transactionRef.remove();
+        console.log('🗑️ Транзакция удалена из Firebase:', firebaseId);
+      }
+      
+      this.showSyncStatus('success', 'Транзакция удалена');
+    } catch (error) {
+      console.error('❌ Ошибка удаления из Firebase:', error);
+      this.showSyncStatus('error', 'Ошибка удаления');
     }
   }
 
@@ -377,5 +421,12 @@ window.initFirebaseSync = function() {
 window.queueForSync = function(data) {
   if (window.firebaseSync) {
     window.firebaseSync.syncToFirebase();
+  }
+};
+
+// Функция для удаления транзакции из Firebase
+window.deleteTransactionFromFirebase = function(transactionId, firebaseId) {
+  if (window.firebaseSync) {
+    window.firebaseSync.deleteTransactionFromFirebase(transactionId, firebaseId);
   }
 };
